@@ -1,4 +1,4 @@
-from vec2 import Vec2
+from green_gauss_theorem.vec2 import Vec2
 import numpy as np
 
 class Triangle:
@@ -10,9 +10,9 @@ class Triangle:
             Vec2(vertex_x[2], vertex_y[2]),
         ]
         self.edges: list[Vec2] = [
-            (self.vertices[1] - self.vertices[0]),  # 0 - 02 -1%3
-            (self.vertices[2] - self.vertices[1]),  # 1 - 10 0%3
-            (self.vertices[0] - self.vertices[2]),  # 2 - 21 1%3
+            (self.vertices[1] - self.vertices[0]),  
+            (self.vertices[2] - self.vertices[1]),  
+            (self.vertices[0] - self.vertices[2]),  
         ]
         self.edge_centers: list[Vec2] = [
             (self.vertices[1] + self.vertices[0]) / 2,
