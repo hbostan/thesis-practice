@@ -49,7 +49,7 @@ def calculate_first_derivative(elements, u, v, p):
         v_first_derivative_x.append(dvdx)
         v_first_derivative_y.append(dvdy)
 
-        return u_first_derivative_x, u_first_derivative_y, v_first_derivative_x, v_first_derivative_y
+    return u_first_derivative_x, u_first_derivative_y, v_first_derivative_x, v_first_derivative_y
 
 def calculate_second_derivative(elements, u, v, p):
     u_second_derivative_x = []
@@ -75,7 +75,7 @@ def calculate_second_derivative(elements, u, v, p):
         v_second_derivative_x.append(dvdxx)
         v_second_derivative_y.append(dvdyy)
 
-        return u_second_derivative_x, u_second_derivative_y, v_second_derivative_x, v_second_derivative_y
+    return u_second_derivative_x, u_second_derivative_y, v_second_derivative_x, v_second_derivative_y
 
 # ----------------------------------------- RESULTS READ ----------------------------------------- #
 plot_check = True
@@ -184,8 +184,8 @@ TimeCoeff = np.zeros((NUM_TIME_STEPS, NUM_POD_MODES))
 
 for i in range(NUM_POD_MODES):
     for j in range(NUM_TIME_STEPS):
-        ModeFactor = np.sqrt(NUM_TIME_STEPS*eig_vals[i])
-        TimeCoeff[j][i] = eig_vecs[j][i]*ModeFactor
+        ModeFactor = np.sqrt(NUM_TIME_STEPS * eig_vals[i])
+        TimeCoeff[j][i] = eig_vecs[j][i] * ModeFactor
 
 # Calculate POD modes
 uPOD = np.zeros((NUM_POD_MODES, NUM_NODES))
@@ -238,8 +238,6 @@ for i in range(NUM_POD_MODES):
     vPOD_second_derivative_x[i, :] = v_second_derivative_x
     vPOD_second_derivative_y[i, :] = v_second_derivative_y
 
-
-
 # --------------------------------------------- PLOTS ---------------------------------------------#
 
 font = {
@@ -258,6 +256,7 @@ if plot_check:
         var = tri.u_find_first_derivative()
         variable.append(var.x)
     plot(elements, mesh_Vx, mesh_Vy, variable)
+    
 
     # for i in range(NUM_POD_MODES):
     #     uPOD_ = uPOD[i, :, :]
