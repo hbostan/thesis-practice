@@ -121,17 +121,6 @@ for i in range(nt):
 
 correlation = correlation / nt
 
-###################################################################################################
-# correlation = np.zeros((nt, nt))
-
-# for i in range(nt):
-#     for j in range(nt):
-        # correlation[i][j] = simps(simps(uFluc[i, :, :] * uFluc[j, :, :] + vFluc[i, :, :] * vFluc[j, :, :], x), y)
-        # correlation[j][i] = correlation[i][j]
-
-# correlation = correlation / nt
-###################################################################################################
-
 # Eigenvalues and eigenvector of correlation matrix.
 eig_vals, eig_vecs = LA.eig(correlation)
 eig_vals = np.real(eig_vals)
@@ -141,10 +130,6 @@ eig_vecs = np.real(eig_vecs)
 sorting_indices = np.abs(eig_vals).argsort()[::-1]
 eig_vals = eig_vals[sorting_indices]
 eig_vecs = eig_vecs[:, sorting_indices]
-
-# print(sorting_indices)
-# print(eig_vals)
-# print(eig_vecs)
 
 # Scale Time Coefficients
 TimeCoeff = np.zeros((nt, nModes))
@@ -188,7 +173,31 @@ for i in range(nModes):
 global GalerkinCoeff
 GalerkinCoeff = galerkin_coefficients(W, X, Y, uMean, vMean, uPOD, vPOD)
 
-# ------- FIGURES ------- #
+t0, t1 = 0, 4*m.pi                                             # start and end
+tInt = np.linspace(t0, t1, 100)                                 # the points of evaluation of solution
+TimeCoeffIC = TimeCoeffProj[0, :]                               # initial value
+TimeCoeffGalerkin = np.zeros((len(tInt), len(TimeCoeffIC)))     # array for solution
+
+TimeCoeffGalerkin[0, :] = TimeCoeffIC
+
+r = integrate.ode(stuart_gs).set_integrator("dopri5")        # choice of method
+r.set_initial_value(TimeCoeffIC, t0)                         # initial values
+for i in range(1, tInt.size):
+   TimeCoeffGalerkin[i, :] = r.integrate(tInt[i])            # get one more value, add it to the array
+   if not r.successful():
+       raise RuntimeError("Could not integrate")
+
+u_field = np.zeros((nt, ny, nx))
+v_field = np.zeros((nt, ny, nx))
+
+for time in range(nt):
+    for mode in range(nModes):
+        u_field[time, :, :] += TimeCoeff[time, mode] * uPOD[mode, :, :]
+        v_field[time, :, :] += TimeCoeff[time, mode] * vPOD[mode, :, :]
+    u_field[time, :, :] += uMean
+    v_field[time, :, :] += vMean
+
+# ----------------------------------------- FIGURES ----------------------------------------- #
 
 # Plot eigenvalues and relative information content. 
 
@@ -206,36 +215,6 @@ for i in range(len(eig_vals)):
   acc = acc + eig_vals[i]
   relative_importance_content[i] = acc / total_energy * 100
 
-t0, t1 = 0, 4*m.pi                                             # start and end
-tInt = np.linspace(t0, t1, 100)                                 # the points of evaluation of solution
-TimeCoeffIC = TimeCoeffProj[0, :]                               # initial value
-TimeCoeffGalerkin = np.zeros((len(tInt), len(TimeCoeffIC)))     # array for solution
-
-TimeCoeffGalerkin[0, :] = TimeCoeffIC
-
-r = integrate.ode(stuart_gs).set_integrator("dopri5")        # choice of method
-r.set_initial_value(TimeCoeffIC, t0)                         # initial values
-for i in range(1, tInt.size):
-   TimeCoeffGalerkin[i, :] = r.integrate(tInt[i])            # get one more value, add it to the array
-   if not r.successful():
-       raise RuntimeError("Could not integrate")
-
-# Reconstruct
-
-print(TimeCoeffProj.shape)
-print(uPOD.shape)
-print(vPOD.shape)
-
-u_field = np.zeros((nt, ny, nx))
-v_field = np.zeros((nt, ny, nx))
-
-for time in range(nt):
-    for mode in range(nModes):
-        u_field[time, :, :] += TimeCoeff[time, mode] * uPOD[mode, :, :]
-        v_field[time, :, :] += TimeCoeff[time, mode] * vPOD[mode, :, :]
-    u_field[time, :, :] += uMean
-    v_field[time, :, :] += vMean
-
 # Plot comparison projected and GS integrated Fourier coefficients
 colors = ['#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928']
 lines = []
@@ -249,91 +228,88 @@ for mode in range(nModes):
 plt.legend(handles=lines)
 plt.show()
 
-
-# for time in range(nt):
-#     print(f'{time=}', end='\r')
-#     dukdy = np.gradient(u_field[time, :, :], dy, axis=0)
-#     dvkdx = np.gradient(v_field[time, :, :], dx, axis=1)
-#     vorticityS = dvkdx - dukdy
+# Plot comparison real and reconstructed vorticity fields
+for time in range(nt):
+    print(f'{time=}', end='\r')
+    dukdy = np.gradient(u_field[time, :, :], dy, axis=0)
+    dvkdx = np.gradient(v_field[time, :, :], dx, axis=1)
+    vorticityS = dvkdx - dukdy
     
-#     fig, (axl, axr) = plt.subplots(2, 1, figsize=(8,8), dpi=150)
-#     lcontour = axl.contourf(X, Y, vorticityS, 100, cmap='turbo')
-#     axl.set_xlabel('x', fontdict=font)
-#     axl.set_ylabel('y', fontdict=font)
-#     ymin,ymax = axl.get_ylim()
-#     xmin,xmax = axl.get_xlim()
-#     aspect = (ymax-ymin)/(xmax-xmin)
-#     axl.set_aspect('equal')
-#     fig.colorbar(lcontour, ax=axl, fraction=0.046*aspect, pad=0.04)
-#     axl.set_title(f'Reconstructed vorticity from POD modes at time = {time}', fontdict=font)
+    fig, (axl, axr) = plt.subplots(2, 1, figsize=(8,8), dpi=150)
+    lcontour = axl.contourf(X, Y, vorticityS, 100, cmap='turbo')
+    axl.set_xlabel('x', fontdict=font)
+    axl.set_ylabel('y', fontdict=font)
+    ymin,ymax = axl.get_ylim()
+    xmin,xmax = axl.get_xlim()
+    aspect = (ymax-ymin)/(xmax-xmin)
+    axl.set_aspect('equal')
+    fig.colorbar(lcontour, ax=axl, fraction=0.046*aspect, pad=0.04)
+    axl.set_title(f'Reconstructed vorticity from POD modes at time = {time}', fontdict=font)
 
-#     # Plot vorticity and velocity vectors at time = 1
-#     dukdy = np.gradient(u[time, :, :], dy, axis=0)
-#     dvkdx = np.gradient(v[time, :, :], dx, axis=1)
-#     vorticity = dvkdx - dukdy
-#     rcontour = axr.contourf(X, Y, vorticity, 100, cmap='turbo')
-#     axr.set_xlabel('x', fontdict=font)
-#     axr.set_ylabel('y', fontdict=font)
-#     ymin,ymax = axr.get_ylim()
-#     xmin,xmax = axr.get_xlim()
-#     aspect = (ymax-ymin)/(xmax-xmin)
-#     axr.set_aspect('equal')
-#     fig.colorbar(rcontour, ax=axr, fraction=0.046*aspect, pad=0.04)
-#     axr.set_title(f'Vorticity at time = {time}', fontdict=font)
-#     plt.tight_layout()
-#     plt.savefig(f"figs/vorticity_time{time:05d}.png")
-#     axl.quiver(X, Y, u_field[-1, :, :], v_field[-1, :, :], scale_units='xy', scale=5)
-#     axr.quiver(X, Y,u[-1, :, :], v[-1, :, :], scale_units='xy', scale=5)
-#     plt.savefig(f"figs_quiver/vorticity_quiver_time{time:05d}.png")
-#     plt.close()
-    
-# print()
-# print()
+    # Plot vorticity and velocity vectors at time = 1
+    dukdy = np.gradient(u[time, :, :], dy, axis=0)
+    dvkdx = np.gradient(v[time, :, :], dx, axis=1)
+    vorticity = dvkdx - dukdy
+    rcontour = axr.contourf(X, Y, vorticity, 100, cmap='turbo')
+    axr.set_xlabel('x', fontdict=font)
+    axr.set_ylabel('y', fontdict=font)
+    ymin,ymax = axr.get_ylim()
+    xmin,xmax = axr.get_xlim()
+    aspect = (ymax-ymin)/(xmax-xmin)
+    axr.set_aspect('equal')
+    fig.colorbar(rcontour, ax=axr, fraction=0.046*aspect, pad=0.04)
+    axr.set_title(f'Vorticity at time = {time}', fontdict=font)
+    plt.tight_layout()
+    plt.savefig(f"figs/vorticity_time{time:05d}.png")
+    axl.quiver(X, Y, u_field[-1, :, :], v_field[-1, :, :], scale_units='xy', scale=5)
+    axr.quiver(X, Y,u[-1, :, :], v[-1, :, :], scale_units='xy', scale=5)
+    plt.savefig(f"figs_quiver/vorticity_quiver_time{time:05d}.png")
+    plt.close()
 
 #       Plot first n_modes important eigenvalues
-# figure, axis = plt.subplots(1, 2)
-# axis[0].plot(np.arange(1, nModes + 1), eig_vals[:nModes], '-o', color='black', ms=8, alpha=1, mfc='red')
-# axis[0].set_xlabel('k', fontdict=font)
-# axis[0].set_ylabel(r'$λ_{k}$', fontdict=font)
-# axis[0].grid()
+figure, axis = plt.subplots(1, 2)
+axis[0].plot(np.arange(1, nModes + 1), eig_vals[:nModes], '-o', color='black', ms=8, alpha=1, mfc='red')
+axis[0].set_xlabel('k', fontdict=font)
+axis[0].set_ylabel(r'$λ_{k}$', fontdict=font)
+axis[0].grid()
 
-# axis[1].plot(np.arange(1, nModes + 1),
-#              relative_importance_content[:nModes],
-#              '-o',
-#              color='black',
-#              ms=8,
-#              alpha=1,
-#              mfc='red')
-# axis[1].set_xlabel('k', fontdict=font)
-# axis[1].set_ylabel(r'$RIC_{k}(\%)$', fontdict=font)
-# axis[1].grid()
-# plt.show()
+axis[1].plot(np.arange(1, nModes + 1),
+             relative_importance_content[:nModes],
+             '-o',
+             color='black',
+             ms=8,
+             alpha=1,
+             mfc='red')
+axis[1].set_xlabel('k', fontdict=font)
+axis[1].set_ylabel(r'$RIC_{k}(\%)$', fontdict=font)
+axis[1].grid()
+plt.show()
 
 #       Plot time coefficients
-# for i in range(0,nModes,2):
-#     plt.plot(t,TimeCoeff[:,i],'b-', label=r'$a_{}$'.format(i))
-#     plt.plot(t,TimeCoeff[:,i+1],'r-', label=r'$a_{}$'.format(i+1))
-#     plt.xlabel('t', fontdict=font)
-#     plt.ylabel(r'$a_{i}$', fontdict=font)
-#     plt.suptitle('Time coefficients')
-#     plt.legend()
-#     plt.grid()
-#     plt.show()
+for i in range(0,nModes,2):
+    plt.plot(t,TimeCoeff[:,i],'b-', label=r'$a_{}$'.format(i))
+    plt.plot(t,TimeCoeff[:,i+1],'r-', label=r'$a_{}$'.format(i+1))
+    plt.xlabel('t', fontdict=font)
+    plt.ylabel(r'$a_{i}$', fontdict=font)
+    plt.suptitle('Time coefficients')
+    plt.legend()
+    plt.grid()
+    plt.show()
 
-    #  Plot POD modes
-# for i in range(nModes):
+#  Plot POD modes
+for i in range(nModes):
 
-#     dukdy = np.gradient(uPOD[i, :, :], dy, axis=0)
-#     dvkdx = np.gradient(vPOD[i, :, :], dx, axis=1)
-#     vorticity = dvkdx - dukdy
+    dukdy = np.gradient(uPOD[i, :, :], dy, axis=0)
+    dvkdx = np.gradient(vPOD[i, :, :], dx, axis=1)
+    vorticity = dvkdx - dukdy
 
-#     plt.contourf(X, Y, vorticity, 100, cmap='turbo')
-#     plt.colorbar()
-#     plt.quiver(X[::2], Y[::2], uPOD[i, ::2], vPOD[i, ::2], scale_units='xy', scale=1)
-#     plt.xlabel('x', fontdict=font)
-#     plt.ylabel('y', fontdict=font)
-#     plt.suptitle('POD Mode {}'.format(i+1), fontdict=font)
-#     plt.show()
+    plt.contourf(X, Y, vorticity, 100, cmap='turbo')
+    plt.colorbar()
+    plt.quiver(X[::2], Y[::2], uPOD[i, ::2], vPOD[i, ::2], scale_units='xy', scale=1)
+    plt.xlabel('x', fontdict=font)
+    plt.ylabel('y', fontdict=font)
+    plt.suptitle('POD Mode {}'.format(i+1), fontdict=font)
+    plt.show()
 
 
 
