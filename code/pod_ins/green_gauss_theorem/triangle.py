@@ -125,8 +125,8 @@ class Triangle:
             if neighbor == None:
                 continue
             normal = self.normals[edge_idx]
-            coeff = self.interp_coeff[edge_idx]
-            grad_at_edge = (coeff * self.u_first_derivative) + ((1-coeff) * neighbor.u_first_derivative)
+            center2edge = self.edge_centers[edge_idx] - self.center
+            grad_at_edge = self.u_at_center + self.u_first_derivative.dot(center2edge)
             second_derivative += grad_at_edge * normal * edge.length
         second_derivative = second_derivative/ self.area
         self.u_second_derivative = second_derivative
@@ -162,8 +162,8 @@ class Triangle:
             if neighbor == None:
                 continue
             normal = self.normals[edge_idx]
-            coeff = self.interp_coeff[edge_idx]
-            grad_at_edge = (coeff * self.v_first_derivative) + ((1-coeff) * neighbor.v_first_derivative)
+            center2edge = self.edge_centers[edge_idx] - self.center
+            grad_at_edge = self.v_at_center + self.v_first_derivative.dot(center2edge)
             second_derivative += grad_at_edge * normal * edge.length
         second_derivative = second_derivative/ self.area
         self.v_second_derivative = second_derivative
