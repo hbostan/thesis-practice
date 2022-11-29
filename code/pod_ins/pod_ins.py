@@ -25,7 +25,7 @@ def plot(elements, mesh_Vx, mesh_Vy, variable):
     fig.colorbar(tri_buf)
     print(variable.max())
     print(variable.min())
-    # plt.show()
+    plt.show()
 
 def calculate_first_derivative(elements, u, v, p):
     u_first_derivative_x = []
@@ -250,17 +250,12 @@ font = {
 if plot_check:
 
     variable = []
-    variable2 = []
     for j,tri in enumerate(elements):
         tri.update(TimeStep_DGNu[-1][j], TimeStep_DGNv[-1][j], TimeStep_DGNp[-1][j])
     for tri in elements:
-        var = tri.u_find_second_derivative()
-        var2 = tri.u_find_first_derivative()
+        var = tri.u_find_first_derivative()
         variable.append(var.x)
-        variable2.append(var2.x)
     plot(elements, mesh_Vx, mesh_Vy, variable)
-    plot(elements, mesh_Vx, mesh_Vy, variable2)
-    plt.show()
     
 
     # for i in range(NUM_POD_MODES):
