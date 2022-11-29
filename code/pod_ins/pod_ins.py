@@ -3,16 +3,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy import linalg as LA
 from green_gauss_theorem.vec2 import Vec2
+from green_gauss_theorem.mesh import Mesh
 from green_gauss_theorem.triangle import Triangle, Inflow, Outflow
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
+import mesh.mesh_info as mesh_info
 
 
-def plot(elements, mesh_Vx, mesh_Vy, variable):
+def plot_mesh(mesh, variable):
     # variable = np.array(variable)/np.max(np.abs(variable))
     fig, ax = plt.subplots()
     tri_buf = []
-    for t in elements:
+    for t in mesh.triangles:
         tpatch = Polygon(t.get_vertex_coords(), fill=False)
         tri_buf.append(tpatch)
     tri_buf = PatchCollection(tri_buf, linewidths=0.1, edgecolors='black')
@@ -20,24 +22,24 @@ def plot(elements, mesh_Vx, mesh_Vy, variable):
     variable = np.array(variable)
     tri_buf.set_cmap('jet')
     ax.add_collection(tri_buf)
-    ax.set_ylim(np.min(mesh_Vy), np.max(mesh_Vy))
-    ax.set_xlim(np.min(mesh_Vx), np.max(mesh_Vx))
-    ax.set_box_aspect((np.max(mesh_Vx) - np.min(mesh_Vx)) / (np.max(mesh_Vy) - np.min(mesh_Vy)))
+    bbox = mesh.bbox()
+    ax.set_ylim(bbox[1])
+    ax.set_xlim(bbox[0])
+    ax.set_box_aspect((bbox[0][1] - bbox[0][0]) / (bbox[1][1] - bbox[1][0]))
     fig.colorbar(tri_buf)
     print(variable.max())
     print(variable.min())
-    plt.show()
+    # plt.show()
 
 
-def calculate_first_derivative(elements, u, v, p):
+def calculate_first_derivative(mesh, u, v, p):
     u_first_derivative_x = []
     u_first_derivative_y = []
     v_first_derivative_x = []
     v_first_derivative_y = []
-    for i, tri in enumerate(elements):
-        # update : calculates corresponding u, v and p at cell centers.
-        tri.update(u[i], v[i], p[i])
-    for tri in elements:
+    mesh.update(u, v, p)
+    # TODO: move into mesh
+    for tri in mesh.triangles:
         u_first_derivative = tri.u_find_first_derivative()
         v_first_derivative = tri.v_find_first_derivative()
 
@@ -54,17 +56,15 @@ def calculate_first_derivative(elements, u, v, p):
     return u_first_derivative_x, u_first_derivative_y, v_first_derivative_x, v_first_derivative_y
 
 
-def calculate_second_derivative(elements, u, v, p):
+def calculate_second_derivative(mesh, u, v, p):
     u_second_derivative_x = []
     u_second_derivative_y = []
-
     v_second_derivative_x = []
     v_second_derivative_y = []
 
-    for i, tri in enumerate(elements):
-        # update : calculates corresponding u, v and p at cell centers.
-        tri.update(u[i], v[i], p[i])
-    for tri in elements:
+    mesh.update(u, v, p)
+    # TODO: Move into mesh
+    for tri in mesh.triangles:
         u_second_derivative = tri.u_find_second_derivative()
         v_second_derivative = tri.v_find_second_derivative()
 
@@ -88,10 +88,10 @@ TimeStep_DGNu = []
 TimeStep_DGNv = []
 TimeStep_DGNp = []
 
-mesh_contents = open('/home/damla/Desktop/Thesis/code/pod_ins/mesh/mesh_info.txt', 'r').read()
-exec(mesh_contents)
+# mesh_contents = open('/home/damla/Desktop/Thesis/code/pod_ins/mesh/mesh_info.txt', 'r').read()
+# exec(mesh_contents)
 
-DIR = '/home/damla/Desktop/Thesis/code/pod_ins/practice_results'
+DIR = 'code/pod_ins/practice_results'
 for file_name in sorted(os.listdir(DIR)):
     file_name = os.path.join(DIR, file_name)
     result_contents = open(file_name, 'r').read()
@@ -114,44 +114,15 @@ U_INFLOW = 1
 V_INFLOW = 0
 P_INFLOW = 0
 
-x_coord = np.array(mesh_DGNx).flatten()
-y_coord = np.array(mesh_DGNy).flatten()
+# x_coord = np.array(mesh_DGNx).flatten()
+# y_coord = np.array(mesh_DGNy).flatten()
 
 U = np.zeros((NUM_TIME_STEPS, NUM_NODES))
 V = np.zeros((NUM_TIME_STEPS, NUM_NODES))
 P = np.zeros((NUM_TIME_STEPS, NUM_NODES))
 
 # --------------------------------------------- MESH --------------------------------------------- #
-# elements [] stores tiangle mesh elements
-elements: list[Triangle] = []
-for e in range(NUM_ELEMENTS):
-    # triangle mesh elements requires vertex & node coordinates.
-    element = Triangle(mesh_Vx[e], mesh_Vy[e], mesh_DGNx[e], mesh_DGNy[e])
-    elements.append(element)
-
-# Fill in neighbors of each triangle
-for elem_idx, neighbor_list in enumerate(EToE):
-    # for elem_idx in range(len(EToE)):
-    #     neighbor_list = EToE[elem_idx]
-    for n_idx, n in enumerate(neighbor_list):
-        if n != -1:
-            neighbor = elements[n]
-            elements[elem_idx].add_neighbor(neighbor)
-        else:
-            # We have a boundary
-            boundary_type = EToB[elem_idx][n_idx]
-            if boundary_type == 1:
-                elements[elem_idx].add_neighbor(None)
-            elif boundary_type == 2:
-                center = elements[elem_idx].edge_centers[n_idx]
-                inflow = Inflow(center, elements[elem_idx], U_INFLOW, V_INFLOW, P_INFLOW)
-                elements[elem_idx].add_neighbor(inflow)
-            elif boundary_type == 3:
-                center = elements[elem_idx].edge_centers[n_idx]
-                outflow = Outflow(center, elements[elem_idx])
-                elements[elem_idx].add_neighbor(outflow)
-            else:
-                elements[elem_idx].add_neighbor(None)
+mesh = Mesh(mesh_info)
 
 # --------------------------------------------- POD --------------------------------------------- #
 for i in range(NUM_TIME_STEPS):
@@ -222,9 +193,9 @@ vPOD_second_derivative_x = np.zeros((NUM_POD_MODES, NUM_ELEMENTS))
 vPOD_second_derivative_y = np.zeros((NUM_POD_MODES, NUM_ELEMENTS))
 
 uMean_first_derivative_x, uMean_first_derivative_y, vMean_first_derivative_x, vMean_first_derivative_y = calculate_first_derivative(
-    elements, uMean, vMean, p)
+    mesh, uMean, vMean, p)
 uMean_second_derivative_x, uMean_second_derivative_y, vMean_second_derivative_x, vMean_second_derivative_y = calculate_second_derivative(
-    elements, uMean, vMean, p)
+    mesh, uMean, vMean, p)
 
 # POD MODE DERIVATIVES
 for i in range(NUM_POD_MODES):
@@ -232,9 +203,9 @@ for i in range(NUM_POD_MODES):
     v = vPOD[i, :, :]
 
     u_first_derivative_x, u_first_derivative_y, v_first_derivative_x, v_first_derivative_y = calculate_first_derivative(
-        elements, u, v, p)
+        mesh, u, v, p)
     u_second_derivative_x, u_second_derivative_y, v_second_derivative_x, v_second_derivative_y = calculate_second_derivative(
-        elements, u, v, p)
+        mesh, u, v, p)
 
     uPOD_first_derivative_x[i, :] = u_first_derivative_x
     uPOD_first_derivative_y[i, :] = u_first_derivative_y
@@ -256,14 +227,19 @@ font = {
 }
 
 if plot_check:
-
+    # TODO: Fix the mess below :)
     variable = []
-    for j, tri in enumerate(elements):
+    variable2 = []
+    for j, tri in enumerate(mesh.triangles):
         tri.update(TimeStep_DGNu[-1][j], TimeStep_DGNv[-1][j], TimeStep_DGNp[-1][j])
-    for tri in elements:
+    for tri in mesh.triangles:
         var = tri.u_find_first_derivative()
+        var2 = tri.u_find_second_derivative()
         variable.append(var.x)
-    plot(elements, mesh_Vx, mesh_Vy, variable)
+        variable2.append(var2.x)
+    plot_mesh(mesh, variable)
+    plot_mesh(mesh, variable2)
+    plt.show()
 
     # for i in range(NUM_POD_MODES):
     #     uPOD_ = uPOD[i, :, :]
