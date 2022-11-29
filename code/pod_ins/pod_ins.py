@@ -7,6 +7,7 @@ from green_gauss_theorem.triangle import Triangle, Inflow, Outflow
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 
+
 def plot(elements, mesh_Vx, mesh_Vy, variable):
     # variable = np.array(variable)/np.max(np.abs(variable))
     fig, ax = plt.subplots()
@@ -21,19 +22,20 @@ def plot(elements, mesh_Vx, mesh_Vy, variable):
     ax.add_collection(tri_buf)
     ax.set_ylim(np.min(mesh_Vy), np.max(mesh_Vy))
     ax.set_xlim(np.min(mesh_Vx), np.max(mesh_Vx))
-    ax.set_box_aspect((np.max(mesh_Vx)-np.min(mesh_Vx))/(np.max(mesh_Vy)-np.min(mesh_Vy)))
+    ax.set_box_aspect((np.max(mesh_Vx) - np.min(mesh_Vx)) / (np.max(mesh_Vy) - np.min(mesh_Vy)))
     fig.colorbar(tri_buf)
     print(variable.max())
     print(variable.min())
     plt.show()
+
 
 def calculate_first_derivative(elements, u, v, p):
     u_first_derivative_x = []
     u_first_derivative_y = []
     v_first_derivative_x = []
     v_first_derivative_y = []
-    for i,tri in enumerate(elements):
-        # update : calculates corresponding u, v and p at cell centers. 
+    for i, tri in enumerate(elements):
+        # update : calculates corresponding u, v and p at cell centers.
         tri.update(u[i], v[i], p[i])
     for tri in elements:
         u_first_derivative = tri.u_find_first_derivative()
@@ -51,6 +53,7 @@ def calculate_first_derivative(elements, u, v, p):
 
     return u_first_derivative_x, u_first_derivative_y, v_first_derivative_x, v_first_derivative_y
 
+
 def calculate_second_derivative(elements, u, v, p):
     u_second_derivative_x = []
     u_second_derivative_y = []
@@ -58,8 +61,8 @@ def calculate_second_derivative(elements, u, v, p):
     v_second_derivative_x = []
     v_second_derivative_y = []
 
-    for i,tri in enumerate(elements):
-        # update : calculates corresponding u, v and p at cell centers. 
+    for i, tri in enumerate(elements):
+        # update : calculates corresponding u, v and p at cell centers.
         tri.update(u[i], v[i], p[i])
     for tri in elements:
         u_second_derivative = tri.u_find_second_derivative()
@@ -77,12 +80,13 @@ def calculate_second_derivative(elements, u, v, p):
 
     return u_second_derivative_x, u_second_derivative_y, v_second_derivative_x, v_second_derivative_y
 
+
 # ----------------------------------------- RESULTS READ ----------------------------------------- #
 plot_check = True
 
-TimeStep_DGNu = [] 
-TimeStep_DGNv = [] 
-TimeStep_DGNp = [] 
+TimeStep_DGNu = []
+TimeStep_DGNv = []
+TimeStep_DGNp = []
 
 mesh_contents = open('/home/damla/Desktop/Thesis/code/pod_ins/mesh/mesh_info.txt', 'r').read()
 exec(mesh_contents)
@@ -100,11 +104,11 @@ for file_name in sorted(os.listdir(DIR)):
 
 # ------------------------------------------ PARAMETERS ------------------------------------------ #
 
-NUM_TIME_STEPS    = len(TimeStep_DGNu)
-NUM_ELEMENTS      = len(TimeStep_DGNu[0])
+NUM_TIME_STEPS = len(TimeStep_DGNu)
+NUM_ELEMENTS = len(TimeStep_DGNu[0])
 NODES_PER_ELEMENT = len(TimeStep_DGNu[0][0])
-NUM_NODES         = NUM_ELEMENTS * NODES_PER_ELEMENT
-NUM_POD_MODES     = 1
+NUM_NODES = NUM_ELEMENTS * NODES_PER_ELEMENT
+NUM_POD_MODES = 1
 
 U_INFLOW = 1
 V_INFLOW = 0
@@ -118,17 +122,17 @@ V = np.zeros((NUM_TIME_STEPS, NUM_NODES))
 P = np.zeros((NUM_TIME_STEPS, NUM_NODES))
 
 # --------------------------------------------- MESH --------------------------------------------- #
-# elements [] stores tiangle mesh elements 
-elements:list[Triangle] = []       
+# elements [] stores tiangle mesh elements
+elements: list[Triangle] = []
 for e in range(NUM_ELEMENTS):
     # triangle mesh elements requires vertex & node coordinates.
     element = Triangle(mesh_Vx[e], mesh_Vy[e], mesh_DGNx[e], mesh_DGNy[e])
-    elements.append(element) 
+    elements.append(element)
 
 # Fill in neighbors of each triangle
 for elem_idx, neighbor_list in enumerate(EToE):
-# for elem_idx in range(len(EToE)):
-#     neighbor_list = EToE[elem_idx]
+    # for elem_idx in range(len(EToE)):
+    #     neighbor_list = EToE[elem_idx]
     for n_idx, n in enumerate(neighbor_list):
         if n != -1:
             neighbor = elements[n]
@@ -196,13 +200,13 @@ for i in range(NUM_POD_MODES):
         uPOD[i, :] = uPOD[i, :] + eig_vecs[j][i] * uFluc[j, :]
         vPOD[i, :] = vPOD[i, :] + eig_vecs[j][i] * vFluc[j, :]
 
-    modeFactor = 1 / np.sqrt(NUM_TIME_STEPS*eig_vals[i])
-    uPOD[i, :] = uPOD[i, :]*modeFactor
-    vPOD[i, :] = vPOD[i, :]*modeFactor
+    modeFactor = 1 / np.sqrt(NUM_TIME_STEPS * eig_vals[i])
+    uPOD[i, :] = uPOD[i, :] * modeFactor
+    vPOD[i, :] = vPOD[i, :] * modeFactor
 
 # ------------------------------------------ DERIVATIVES ------------------------------------------#
-uPOD  = uPOD.reshape(NUM_POD_MODES, NUM_ELEMENTS, NODES_PER_ELEMENT)
-vPOD  = vPOD.reshape(NUM_POD_MODES, NUM_ELEMENTS, NODES_PER_ELEMENT)
+uPOD = uPOD.reshape(NUM_POD_MODES, NUM_ELEMENTS, NODES_PER_ELEMENT)
+vPOD = vPOD.reshape(NUM_POD_MODES, NUM_ELEMENTS, NODES_PER_ELEMENT)
 uMean = uMean.reshape(NUM_ELEMENTS, NODES_PER_ELEMENT)
 vMean = vMean.reshape(NUM_ELEMENTS, NODES_PER_ELEMENT)
 p = TimeStep_DGNp[-1]
@@ -217,17 +221,21 @@ uPOD_second_derivative_y = np.zeros((NUM_POD_MODES, NUM_ELEMENTS))
 vPOD_second_derivative_x = np.zeros((NUM_POD_MODES, NUM_ELEMENTS))
 vPOD_second_derivative_y = np.zeros((NUM_POD_MODES, NUM_ELEMENTS))
 
-uMean_first_derivative_x, uMean_first_derivative_y, vMean_first_derivative_x, vMean_first_derivative_y = calculate_first_derivative(elements, uMean, vMean, p)
-uMean_second_derivative_x, uMean_second_derivative_y, vMean_second_derivative_x, vMean_second_derivative_y = calculate_second_derivative(elements, uMean, vMean, p)
+uMean_first_derivative_x, uMean_first_derivative_y, vMean_first_derivative_x, vMean_first_derivative_y = calculate_first_derivative(
+    elements, uMean, vMean, p)
+uMean_second_derivative_x, uMean_second_derivative_y, vMean_second_derivative_x, vMean_second_derivative_y = calculate_second_derivative(
+    elements, uMean, vMean, p)
 
 # POD MODE DERIVATIVES
 for i in range(NUM_POD_MODES):
     u = uPOD[i, :, :]
     v = vPOD[i, :, :]
 
-    u_first_derivative_x, u_first_derivative_y, v_first_derivative_x, v_first_derivative_y = calculate_first_derivative(elements, u, v, p)
-    u_second_derivative_x, u_second_derivative_y, v_second_derivative_x, v_second_derivative_y = calculate_second_derivative(elements, u, v, p)
-    
+    u_first_derivative_x, u_first_derivative_y, v_first_derivative_x, v_first_derivative_y = calculate_first_derivative(
+        elements, u, v, p)
+    u_second_derivative_x, u_second_derivative_y, v_second_derivative_x, v_second_derivative_y = calculate_second_derivative(
+        elements, u, v, p)
+
     uPOD_first_derivative_x[i, :] = u_first_derivative_x
     uPOD_first_derivative_y[i, :] = u_first_derivative_y
     vPOD_first_derivative_x[i, :] = v_first_derivative_x
@@ -250,13 +258,12 @@ font = {
 if plot_check:
 
     variable = []
-    for j,tri in enumerate(elements):
+    for j, tri in enumerate(elements):
         tri.update(TimeStep_DGNu[-1][j], TimeStep_DGNv[-1][j], TimeStep_DGNp[-1][j])
     for tri in elements:
         var = tri.u_find_first_derivative()
         variable.append(var.x)
     plot(elements, mesh_Vx, mesh_Vy, variable)
-    
 
     # for i in range(NUM_POD_MODES):
     #     uPOD_ = uPOD[i, :, :]
@@ -268,7 +275,6 @@ if plot_check:
     #         var = tri.u_find_first_derivative()
     #         variable.append(var.x)
     #     plot(elements, mesh_Vx, mesh_Vy, variable)
-
 
     # relative_importance_content = np.zeros(NUM_TIME_STEPS)
     # total_energy = np.sum(eig_vals)
@@ -296,7 +302,4 @@ if plot_check:
     # axis[1].set_ylabel(r'$RIC_{k}(\%)$', fontdict=font)
     # axis[1].grid()
     # # plt.savefig('Relative Importance Content.png')
-    # plt.show()    
-
-
-
+    # plt.show()

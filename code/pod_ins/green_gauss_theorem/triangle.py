@@ -1,36 +1,35 @@
 from green_gauss_theorem.vec2 import Vec2
 import numpy as np
 
+
 class Triangle:
 
-    def __init__(self, vertex_x, vertex_y, node_x, node_y):
-        self.vertices: list[Vec2] = [
-            Vec2(vertex_x[0], vertex_y[0]),
-            Vec2(vertex_x[1], vertex_y[1]),
-            Vec2(vertex_x[2], vertex_y[2]),
-        ]
+    def __init__(self, pts_offsets, points, node_x, node_y):
+        # self.points is a reference to the parent mesh's points list
+        self.points: list[Vec2] = points
+        # self.verts holds the vertices of triangle as offsets into the
+        # self.points array
+        self.verts: list[int] = pts_offsets
         self.edges: list[Vec2] = [
-            (self.vertices[1] - self.vertices[0]),  
-            (self.vertices[2] - self.vertices[1]),  
-            (self.vertices[0] - self.vertices[2]),  
+            (self.points[self.verts[1]] - self.points[self.verts[0]]),
+            (self.points[self.verts[2]] - self.points[self.verts[1]]),
+            (self.points[self.verts[0]] - self.points[self.verts[2]]),
         ]
         self.edge_centers: list[Vec2] = [
-            (self.vertices[1] + self.vertices[0]) / 2,
-            (self.vertices[2] + self.vertices[1]) / 2,
-            (self.vertices[0] + self.vertices[2]) / 2,
+            (self.points[self.verts[1]] + self.points[self.verts[0]]) / 2,
+            (self.points[self.verts[2]] + self.points[self.verts[1]]) / 2,
+            (self.points[self.verts[0]] + self.points[self.verts[2]]) / 2,
         ]
         self.neighbors: list['Triangle'] = []
         self.interp_coeff: list[float] = []
 
-        self.nodes: list[Vec2] = [
-            Vec2(nx, ny) for nx, ny in zip(node_x, node_y)
-        ]
+        self.nodes: list[Vec2] = [Vec2(nx, ny) for nx, ny in zip(node_x, node_y)]
         self.center: Vec2 = self.find_center()
-        self.area : float = self.find_area()
+        self.area: float = self.find_area()
         self.normals: list[Vec2] = self.find_edge_normals()
 
     def get_vertex_coords(self):
-        return np.array([[v.x, v.y] for v in self.vertices])
+        return np.array([[self.points[v].x, self.points[v].y] for v in self.verts])
 
     def add_neighbor(self, neighbor: 'Triangle'):
         self.neighbors.append(neighbor)
@@ -38,16 +37,17 @@ class Triangle:
             self.interp_coeff.append(0)
             return
         # coeff = |(xf -xn)| / |(xp - xn)|
-        which_edge = len(self.neighbors) - 1 # self.neighbors.index(neighbor)
+        which_edge = len(self.neighbors) - 1  # self.neighbors.index(neighbor)
         center2edge = neighbor.center.distance_to(self.edge_centers[which_edge])
         center2center = self.center.distance_to(neighbor.center)
-        coeff = center2edge/center2center
+        coeff = center2edge / center2center
         self.interp_coeff.append(coeff)
-        
+
     # CoM of the triangle as the average of x and y values
     def find_center(self) -> Vec2:
         x, y = 0, 0
-        for v in self.vertices:
+        for p_idx in self.verts:
+            v = self.points[p_idx]
             x += v.x
             y += v.y
         x, y = x / 3, y / 3
@@ -57,8 +57,10 @@ class Triangle:
     def find_edge_normals(self) -> list[Vec2]:
         normals = []
         for i, edge in enumerate(self.edges):
-            other_point = self.vertices[(2 + i) % 3]
-            other_line = other_point - self.vertices[i]
+            other_offset = self.verts[(2 + i) % 3]
+            this_offset = self.verts[i]
+            other_point = self.points[other_offset]
+            other_line = other_point - self.points[this_offset]
             normal = edge.normal()
             if other_line.dot(normal) > 0:
                 normal = -1 * normal
@@ -79,11 +81,14 @@ class Triangle:
             total_w += w
             total_u += w * v
         return total_u / total_w
-    
+
     def find_area(self):
-        v1, v2, v3 = self.vertices
+        v1, v2, v3 = self.verts
+        v1 = self.points[v1]
+        v2 = self.points[v2]
+        v3 = self.points[v3]
         # Area by matrix determinant
-        return (v1.x*(v2.y-v3.y)) + (v2.x*(v3.y-v1.y)) + (v3.x*(v1.y-v2.y))
+        return (v1.x * (v2.y - v3.y)) + (v2.x * (v3.y - v1.y)) + (v3.x * (v1.y - v2.y))
 
     # Find and set the values of u, v, p at triangle (cell) center.
     def update(self, u, v, p):
@@ -103,7 +108,7 @@ class Triangle:
             # -> wall u_at_edge = Dirichlet BC (i.e. u_at_edge = 0)
             if neighbor == None:
                 continue
-            u_at_edge = (coeff * self.u_at_center) + ((1-coeff) * neighbor.u_at_center)
+            u_at_edge = (coeff * self.u_at_center) + ((1 - coeff) * neighbor.u_at_center)
             flux_at_edge = u_at_edge * normal * edge.length
             first_derivative += flux_at_edge
 
@@ -125,10 +130,10 @@ class Triangle:
             if neighbor == None:
                 continue
             normal = self.normals[edge_idx]
-            coeff = self.interp_coeff[edge_idx]
-            grad_at_edge = (coeff * self.u_first_derivative) + ((1-coeff) * neighbor.u_first_derivative)
+            center2edge = self.edge_centers[edge_idx] - self.center
+            grad_at_edge = self.u_at_center + self.u_first_derivative.dot(center2edge)
             second_derivative += grad_at_edge * normal * edge.length
-        second_derivative = second_derivative/ self.area
+        second_derivative = second_derivative / self.area
         self.u_second_derivative = second_derivative
         return second_derivative
 
@@ -141,7 +146,7 @@ class Triangle:
             # if at boundary skip edge
             if neighbor == None:
                 continue
-            v_at_edge = (coeff * self.v_at_center) + ((1-coeff) * neighbor.v_at_center)
+            v_at_edge = (coeff * self.v_at_center) + ((1 - coeff) * neighbor.v_at_center)
             flux_at_edge = v_at_edge * normal * edge.length
             first_derivative += flux_at_edge
         first_derivative = first_derivative / self.area
@@ -162,13 +167,13 @@ class Triangle:
             if neighbor == None:
                 continue
             normal = self.normals[edge_idx]
-            coeff = self.interp_coeff[edge_idx]
-            grad_at_edge = (coeff * self.v_first_derivative) + ((1-coeff) * neighbor.v_first_derivative)
+            center2edge = self.edge_centers[edge_idx] - self.center
+            grad_at_edge = self.v_at_center + self.v_first_derivative.dot(center2edge)
             second_derivative += grad_at_edge * normal * edge.length
-        second_derivative = second_derivative/ self.area
+        second_derivative = second_derivative / self.area
         self.v_second_derivative = second_derivative
         return second_derivative
-    
+
     def p_find_first_derivative(self):
         grad = Vec2(0, 0)
         for edge_idx, edge in enumerate(self.edges):
@@ -178,48 +183,52 @@ class Triangle:
             # if at boundary skip edge
             if neighbor == None:
                 continue
-            p_at_edge = (coeff * self.p_at_center) + ((1-coeff) * neighbor.p_at_center)
+            p_at_edge = (coeff * self.p_at_center) + ((1 - coeff) * neighbor.p_at_center)
             flux_at_edge = p_at_edge * normal * edge.length
             grad += flux_at_edge
         grad = grad / self.area
         return grad
 
+
 class Inflow:
+
     def __init__(self, center, neighbor_of, u, v, p):
         self.center = center
         self.neighbor_of = neighbor_of
         self.u_at_center = u
-        self.v_at_center = v 
+        self.v_at_center = v
         self.p_at_center = p
 
     # Upwind scheme to find the derivative at inlet
     def u_find_first_derivative(self):
-        dudx = (self.u_at_center - self.neighbor_of.u_at_center)/ (self.center.distance_to(self.neighbor_of.center))
+        dudx = (self.u_at_center - self.neighbor_of.u_at_center) / (self.center.distance_to(self.neighbor_of.center))
         dudy = 0
         self.u_first_derivative = Vec2(dudx, dudy)
         return self.u_first_derivative
-    
+
     def v_find_first_derivative(self):
-        dvdx = (self.v_at_center - self.neighbor_of.v_at_center)/ (self.center.distance_to(self.neighbor_of.center))
+        dvdx = (self.v_at_center - self.neighbor_of.v_at_center) / (self.center.distance_to(self.neighbor_of.center))
         dvdy = 0
         self.v_first_derivative = Vec2(dvdx, dvdy)
         return self.v_first_derivative
 
+
 class Outflow:
+
     def __init__(self, center, neighbor_of):
         self.neighbor_of = neighbor_of
         self.center = center
-    
+
     # Fully developed BC at outlet
     def u_find_first_derivative(self):
-        self.u_first_derivative = Vec2(0,0)
+        self.u_first_derivative = Vec2(0, 0)
         return self.u_first_derivative
-    
+
     # Fully developed BC at outlet
     def v_find_first_derivative(self):
-        self.v_first_derivative = Vec2(0,0)
+        self.v_first_derivative = Vec2(0, 0)
         return self.v_first_derivative
-    
+
     @property
     def u_at_center(self):
         return self.neighbor_of.u_at_center
