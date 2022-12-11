@@ -5,6 +5,7 @@ from mpl_toolkits import mplot3d
 from matplotlib import cm
 import matplotlib.pyplot as plt
 from numpy import arange, linalg as LA
+from scipy.integrate import simps
 from scipy import integrate
 import math as m
 
@@ -63,7 +64,7 @@ c  = 1          # convection velocity
 nx = 100        # number of grid points in x-direction
 ny = 50         # number of grid points in y-direction
 nt = 50         # number of snapshots 
-nModes = 6      # Number of modes
+nModes = 10     # Number of modes
 
 T  = 2 * m.pi               # Final time
 dt = T / (nt-1)             # Time Step Size
@@ -111,14 +112,21 @@ W[-1, 0] = 0.25*dx*dy
 W[-1,-1] = 0.25*dx*dy
 W[0 ,-1] = 0.25*dx*dy
 
-correlation = np.zeros((nt, nt))
+# correlation1 = np.zeros((nt, nt))
+# for i in range(nt):
+#     for j in range(nt):
+#         correlation1[i][j] = np.sum(np.sum(W * (uFluc[i, :, :] * uFluc[j, :, :] +
+#                                                vFluc[i, :, :] * vFluc[j, :, :])))
+#         correlation1[j][i] = correlation1[i][j]
+# correlation1 = correlation1 / nt
 
+correlation = np.zeros((nt, nt))
 for i in range(nt):
     for j in range(nt):
-        correlation[i][j] = np.sum(np.sum(W * (uFluc[i, :, :] * uFluc[j, :, :] +
-                                               vFluc[i, :, :] * vFluc[j, :, :])))
+        A = uFluc[i, :, :] * uFluc[j, :, :] + vFluc[i, :, :] * vFluc[j, :, :]
+        correlation[i][j] = simps(simps(uFluc[i, :, :] * uFluc[j, :, :] +
+                                                vFluc[i, :, :] * vFluc[j, :, :], x), y)
         correlation[j][i] = correlation[i][j]
-
 correlation = correlation / nt
 
 # Eigenvalues and eigenvector of correlation matrix.
@@ -173,7 +181,7 @@ for i in range(nModes):
 global GalerkinCoeff
 GalerkinCoeff = galerkin_coefficients(W, X, Y, uMean, vMean, uPOD, vPOD)
 
-t0, t1 = 0, 4*m.pi                                             # start and end
+t0, t1 = 0, 4*m.pi                                              # start and end
 tInt = np.linspace(t0, t1, 100)                                 # the points of evaluation of solution
 TimeCoeffIC = TimeCoeffProj[0, :]                               # initial value
 TimeCoeffGalerkin = np.zeros((len(tInt), len(TimeCoeffIC)))     # array for solution
@@ -216,11 +224,11 @@ for i in range(len(eig_vals)):
   relative_importance_content[i] = acc / total_energy * 100
 
 # Plot comparison projected and GS integrated Fourier coefficients
-colors = ['#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928']
+# colors = ['#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928']
 lines = []
-for mode in range(nModes):
-    l, = plt.plot(t, TimeCoeffProj[:, mode], color=colors[mode], linestyle='-', marker='+', linewidth=4, markersize=10, alpha=0.8, label=rf'$a_{mode}{{t}}$ - True')
-    l2, = plt.plot(tInt, TimeCoeffGalerkin[:, mode],color=colors[nModes+mode], linestyle='--', marker='o', linewidth=4, markersize=5, alpha=0.8, label=rf'$a_{mode}{{t}}$ - GP')
+for mode in range(2):
+    l, = plt.plot(t, TimeCoeffProj[:, mode], linestyle='-', marker='+', linewidth=4, markersize=10, alpha=0.8, label=rf'$a_{mode}{{t}}$ - True')
+    l2, = plt.plot(tInt, TimeCoeffGalerkin[:, mode], linestyle='--', marker='o', linewidth=4, markersize=5, alpha=0.8, label=rf'$a_{mode}{{t}}$ - GP')
     plt.xlabel("Time", fontdict=font)
     plt.ylabel("Time coefficients", fontdict=font)
     lines.append(l)
