@@ -1,136 +1,118 @@
-import os
-import matplotlib.pyplot as plt
 import numpy as np
-from numpy import linalg as LA
-from topology.mesh import Mesh
-from matplotlib.patches import Polygon
-from matplotlib.collections import PatchCollection
-import fine_mesh.mesh_info as mesh_info
-from scipy import integrate
-import concurrent.futures
-from utils.result_reader import read_from_dir
-from pod import calculate_pod_modes
-from galerkin_projection import galerkin_projection
+import matplotlib.pyplot as plt
+from snapshots import Snapshots
+import utils.cylinder_plot as cp
+import utils.result_reader as resread
+from pod import find_pod_modes, find_time_coeffs
+from projection import find_galerkin_coefficients
+import time
+
+plotting = True
+dimension = 2
+num_pod_modes = 4
+
+results = resread.load_meshes('./results/re200_t025', 14)  # read results
+snapshots = Snapshots(results)  # create snapshots from results
+mesh = results[0]
+inner_weights = np.ones(mesh.number_nodes * dimension) * mesh.volume_weights
 
 
-# Plots a mesh using `variable` as the values for coloring.
-def plot_mesh(mesh, variable):
-    fig, ax = plt.subplots()
-    tri_buf = []
-    for t in mesh.triangles:
-        tpatch = Polygon(t.get_vertex_coords(), fill=False)
-        tri_buf.append(tpatch)
-    tri_buf = PatchCollection(tri_buf, linewidths=0.1, edgecolors='black')
-    tri_buf.set_array(variable)
-    variable = np.array(variable)
-    tri_buf.set_cmap('jet')
-    ax.add_collection(tri_buf)
-    bbox = mesh.bbox()
-    ax.set_ylim(bbox[1])
-    ax.set_xlim(bbox[0])
-    ax.set_box_aspect((bbox[0][1] - bbox[0][0]) / (bbox[1][1] - bbox[1][0]))
-    fig.colorbar(tri_buf)
+# weighted scalar product
+def scalar_product(var1, var2, weights=inner_weights):
+    return np.sum(var1 * var2 * weights)
 
 
-# ----------------------------------------- RESULTS READ ----------------------------------------- #
+# calculating mean flow field and fluctuating velocity
+def find_avg_fluc(snapshots):
+    #snapshot.U = stack of u and v velocity
+    Us = np.array([snap.U for snap in snapshots.time]).reshape((snapshots.num_snaps, -1))
+    # mean flow field
+    UAvg = np.mean(Us, 0)
+    # centered flow field
+    UFluc = Us - np.repeat(np.expand_dims(UAvg, 0), snapshots.num_snaps, axis=0)
+    UFluc = UFluc.transpose()
+    return UAvg, UFluc
 
-DIR = 'fine_re200'
-TimeStep_DGNu, TimeStep_DGNv, TimeStep_DGNp, num_ts = read_from_dir(DIR)
-mesh = Mesh(mesh_info)
-# ------------------------------------------ PARAMETERS ------------------------------------------ #
 
-NUM_TIME_STEPS = num_ts
-NUM_ELEMENTS = mesh.num_triangles
-NODES_PER_ELEMENT = mesh.num_node_per_triangle
-NUM_NODES = NUM_ELEMENTS * NODES_PER_ELEMENT
-NUM_POD_MODES = 10
+def galerkin_system(t, a, nu=0.005):
+    global b1, b2, L1, L2, Q
+    a_dot = np.empty_like(a, dtype=np.float128)
+    for k in range(a_dot.shape[0]):
+        a_dot[k] = nu * b1[k] + b2[k] + np.inner(
+            (nu * L1[k, :] + L2[k, :]), a) + np.matmul(np.matmul(np.expand_dims(a, 1).T, Q[k]), np.expand_dims(a, 1))
+    return a_dot
 
-U_INFLOW = 1
-V_INFLOW = 0
-P_INFLOW = 0
-RE = 200
-VISC = 1 / RE
-FINAL_T = 100
-TIME_STEP = 1
-TIME = np.linspace(0, FINAL_T, NUM_TIME_STEPS)
 
-pod_result = calculate_pod_modes(TimeStep_DGNu, TimeStep_DGNv, TimeStep_DGNp, NUM_TIME_STEPS, NUM_NODES, NUM_POD_MODES)
-TimeCoeffGalerkin, time_galerkin = galerkin_projection(mesh, pod_result, VISC, FINAL_T, TIME_STEP)
+# defined ode solver
+def RK45(f, interval, a0, dt):
+    # get initial and end time
+    t = interval[0]
+    tmax = interval[1]
+    # compute number of steps
+    Nt = np.abs(int((tmax - t) / dt)) + 1
+    # initialize time coefficients projection matrix
+    a = np.zeros((a0.shape[0], Nt))
+    # initial conditions
+    a[:, 0] = a0
+    for i in range(Nt - 1):
+        k1 = dt * f(t, a[:, i])
+        k2 = dt * f(t + dt / 2, a[:, i] + k1 / 2)
+        k3 = dt * f(t + dt / 2, a[:, i] + k2 / 2)
+        k4 = dt * f(t + dt, a[:, i] + k3)
+        k = (k1 + 2 * k2 + 2 * k3 + k4) / 6
+        a[:, i + 1] = a[:, i] + k
+        t = t + dt
+    return a
 
-# u_reconstruct = np.zeros((NUM_TIME_STEPS, NUM_ELEMENTS))
-# v_reconstruct = np.zeros((NUM_TIME_STEPS, NUM_ELEMENTS))
 
-# for time in range(NUM_TIME_STEPS):
-#     for mode in range(NUM_POD_MODES):
-#         u_reconstruct[time, :] += pod_result.time_coeff[time, mode] * pod_result.uPOD[mode, :]
-#         v_reconstruct[time, :] += pod_result.time_coeff[time, mode] * pod_result.vPOD[mode, :]
-#     u_reconstruct[time, :] += pod_result.uMean
-#     v_reconstruct[time, :] += pod_result.vMean
+UAvg, UFluc = find_avg_fluc(snapshots)
+[PODModes, S] = find_pod_modes(UFluc, scalar_product, num_pod_modes=num_pod_modes)
+time_coeffs = find_time_coeffs(UFluc, PODModes, scalar_product)
+b1, b2, L1, L2, Q = find_galerkin_coefficients(mesh, UAvg, PODModes, scalar_product)
 
-# u_galerkin = np.zeros((NUM_TIME_STEPS, NUM_ELEMENTS))
-# v_galerkin = np.zeros((NUM_TIME_STEPS, NUM_ELEMENTS))
+a0 = time_coeffs[:num_pod_modes, 0]
+time_interval = (0, 25)
+dt = 0.25
+time_coeffs_projection = RK45(galerkin_system, time_interval, a0, dt)
 
-# for time in range(NUM_TIME_STEPS):
-#     for mode in range(NUM_POD_MODES):
-#         u_galerkin[time, :] += TimeCoeffGalerkin[time, mode] * pod_result.uPOD[mode, :]
-#         v_galerkin[time, :] += TimeCoeffGalerkin[time, mode] * pod_result.vPOD[mode, :]
-#     u_galerkin[time, :] += pod_result.uMean
-#     v_galerkin[time, :] += pod_result.vMean
+if plotting:
+    # Plotting POD Modes
+    xcoord = snapshots.time[0].xs
+    ycoord = snapshots.time[0].ys
 
-# plot_mesh(mesh, u_galerkin[-1, :])
-# plt.show()
+    for i in range(num_pod_modes):
+        # POD modes for velocity u
+        fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+        cp.plot_cylinder_data(xcoord, ycoord, PODModes[:mesh.number_nodes, i], resolution=200, ax=ax, cbar=False)
+        plt.show()
 
-# --------------------------------------------- PLOTS ---------------------------------------------#
-font = {
-    'family': 'serif',
-    'color': 'black',
-    'weight': 'normal',
-    'size': 18,
-}
+    # Plotting reference time coefficients vs galerkin time coefficients
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    fig.tight_layout(pad=3.0)
+    # loop four dofs
+    for i in range(0, 1):
+        ax.plot(np.linspace(0, dt * len(time_coeffs_projection[i, :]), len(time_coeffs_projection[i, :]))[:],
+                time_coeffs_projection[i, :],
+                label="Galerkin Projection Time Coefficient " + str(i + 1))
+    for i in range(0, 1):
+        ax.plot(np.linspace(0, dt * len(time_coeffs[i, :]), len(time_coeffs[i, :])),
+                time_coeffs[i, :],
+                label="Time Coefficient " + str(i + 1),
+                linestyle="dashed")
 
-# colors = ['#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928']
-lines = []
-for mode in range(1):
-    l, = plt.plot(TIME,
-                  pod_result.time_coeff[:, mode],
-                  linestyle='-',
-                  marker='+',
-                  linewidth=4,
-                  markersize=10,
-                  alpha=0.8,
-                  label=rf'$a_{mode}{{t}}$ - True')
-    l2, = plt.plot(time_galerkin,
-                   TimeCoeffGalerkin[:, mode],
-                   linestyle='--',
-                   marker='o',
-                   linewidth=4,
-                   markersize=5,
-                   alpha=0.8,
-                   label=rf'$a_{mode}{{t}}$ - GP')
-    plt.xlabel("Time", fontdict=font)
-    plt.ylabel("Time coefficients", fontdict=font)
-    lines.append(l)
-    lines.append(l2)
-plt.legend(handles=lines)
-plt.show()
+    ax.legend(title="Projection", loc=1)
+    ax.set_xlabel("t", fontsize=16)
+    ax.set_ylabel("a", fontsize=16, labelpad=-2)
+    plt.show()
 
-# variable = []
-# for j, tri in enumerate(mesh.triangles):
-#     tri.update(TimeStep_DGNu[-1][j], TimeStep_DGNv[-1][j], TimeStep_DGNp[-1][j])
-# for tri in mesh.triangles:
-#     var = tri.u_at_center
-#     variable.append(var)
-# plot_mesh(mesh, variable)
-# plt.show()
+    # reconstruction plotting
+    rec = np.zeros_like(UFluc)
+    for j in range(4):
+        rec += np.outer(PODModes[:, j], time_coeffs_projection[j, :])
+    rec += np.repeat(np.expand_dims(UAvg, 1), snapshots.num_snaps, 1)
 
-# for i in range(NUM_POD_MODES):
-#     uPOD_ = uPOD[i, :, :]
-#     vPOD_ = vPOD[i, :, :]
-#     variable = []
-#     for j,tri in enumerate(mesh.triangles):
-#         tri.update(uPOD_[j], vPOD_[j], TimeStep_DGNp[-1][j])
-#     for tri in mesh.triangles:
-#         var = tri.u_at_center
-#         variable.append(var)
-#     plot_mesh(mesh, variable)
-#     plt.show()
+    for i in range(snapshots.num_snaps):
+        if i % 5 == 0:
+            fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+            cp.plot_cylinder_data(xcoord, ycoord, rec[:mesh.number_nodes, i], resolution=200, ax=ax, cbar=False)
+            plt.show()

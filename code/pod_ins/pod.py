@@ -1,70 +1,53 @@
 import numpy as np
-from numpy import linalg as LA
 
 
-class PODResult:
+def find_pod_modes(snapshots, scalar_product, num_pod_modes=4):
 
-    def __init__(self, uMean, vMean, uPOD, vPOD, tc, npm):
-        self.uMean = uMean
-        self.vMean = vMean
-        self.uPOD = uPOD
-        self.vPOD = vPOD
-        self.time_coeff = tc
-        self.num_pod_modes = npm
+    num_snaps = snapshots.shape[1]
+    num_total_nodes = snapshots.shape[0]  # 2 * num_nodes (for u and v)
 
+    # correlation matrix
+    C = np.empty((num_snaps, num_snaps))
+    for i in range(num_snaps):
+        # utilize symmetry of C
+        for j in range(i, num_snaps):
+            C[i, j] = scalar_product(snapshots[:, i], snapshots[:, j])
+            C[j, i] = C[i, j]  # symmetry property
 
-def calculate_pod_modes(ts_dgnu, ts_dgnv, ts_dgnp, num_ts, num_nodes, num_pod_modes):
-    U = np.zeros((num_ts, num_nodes))
-    V = np.zeros((num_ts, num_nodes))
-    P = np.zeros((num_ts, num_nodes))
+    # eigenvalue problem of correlation matrix
+    S, V = np.linalg.eigh(C, UPLO='L')
+    # flip due to return structure of bp.linalg.eigh
+    S = np.flip(S, 0)  # make S in descending order
+    V = np.flip(V, 1)  # make V correspondingly
 
-    for i in range(num_ts):
-        U[i, :] = ts_dgnu[i].flatten()
-        V[i, :] = ts_dgnv[i].flatten()
-        P[i, :] = ts_dgnp[i].flatten()
-
-    # Find mean velocities wrt time
-    uMean = np.mean(U, axis=0)
-    vMean = np.mean(V, axis=0)
-    pMean = np.mean(P, axis=0)
-
-    # Substract mean from real velocities to find fluctuating velocities.
-    uFluc = np.zeros((num_ts, num_nodes))
-    vFluc = np.zeros((num_ts, num_nodes))
-    for t in range(num_ts):
-        uFluc[t, :] = U[t, :] - uMean
-        vFluc[t, :] = V[t, :] - vMean
-
-    # Create snapshot array using fluctuating velocities.
-    snapshot = np.concatenate((uFluc, vFluc), axis=1)
-    covariance = np.cov(snapshot)
-
-    # Eigenvalues and eigenvector of correlation matrix.
-    eig_vals, eig_vecs = LA.eig(covariance)
-    eig_vals = np.real(eig_vals)
-    eig_vecs = np.real(eig_vecs)
-
-    # Sort eigenvalues and vectors according to abs(eig_val)
-    sorting_indices = np.abs(eig_vals).argsort()[::-1]
-    eig_vals = eig_vals[sorting_indices]
-    eig_vecs = eig_vecs[:, sorting_indices]
-
-    # Find and normalize time coefficients
-    time_coeff = np.zeros((num_ts, num_pod_modes))
+    # construct spatial POD Modes from snapshots
+    PODModes = np.zeros((num_total_nodes, num_pod_modes))
     for i in range(num_pod_modes):
-        for j in range(num_ts):
-            time_factor = np.sqrt(num_ts * eig_vals[i])
-            time_coeff[j][i] = eig_vecs[j][i] * time_factor
+        PODModes[:, i] = 1 / np.sqrt(S[i]) * np.matmul(snapshots, V[:, i])
 
-    # Calculate POD modes
-    uPOD = np.zeros((num_pod_modes, num_nodes))
-    vPOD = np.zeros((num_pod_modes, num_nodes))
+    # computing eigenvalues from snapshots
+    S = np.zeros(num_pod_modes)
     for i in range(num_pod_modes):
-        for j in range(num_ts):
-            uPOD[i, :] = uPOD[i, :] + eig_vecs[j][i] * uFluc[j, :]
-            vPOD[i, :] = vPOD[i, :] + eig_vecs[j][i] * vFluc[j, :]
-        mode_factor = 1 / np.sqrt(num_ts * eig_vals[i])
-        uPOD[i, :] = uPOD[i, :] * mode_factor
-        vPOD[i, :] = vPOD[i, :] * mode_factor
+        for j in range(num_snaps):
+            S[i] += scalar_product(snapshots[:, j], PODModes[:, i])**2
 
-    return PODResult(uMean, vMean, uPOD, vPOD, time_coeff, num_pod_modes)
+    return [PODModes, S]
+
+
+def find_time_coeffs(snapshots, podModes, scalar_product, reconstruction_dimension=0):
+
+    # input dimensions
+    num_total_nodes = podModes.shape[1]
+    num_snaps = snapshots.shape[1]
+
+    # if reconstruction dimension is 0 -> use all possible vectors
+    if reconstruction_dimension == 0:
+        reconstruction_dimension = num_total_nodes
+
+    # compute mode activation by projection
+    time_coeffs = np.zeros((num_total_nodes, num_snaps))
+    for t in range(num_snaps):
+        for i in range(reconstruction_dimension):
+            time_coeffs[i, t] = scalar_product(snapshots[:, t], podModes[:, i])
+
+    return time_coeffs
