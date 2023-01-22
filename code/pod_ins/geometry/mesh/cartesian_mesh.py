@@ -65,6 +65,9 @@ class CartesianStructuredMesh:
         # status for initialization
         self.status("Mesh Initialization Successful!")
 
+    def node_coords(self):
+        return [n.x for n in self.nodes], [n.y for n in self.nodes]
+
     def status(self, print_string):
         # print(print_string)
         return

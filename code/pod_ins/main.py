@@ -1,20 +1,19 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from snapshots import Snapshots
-from utils.plotting import plot_square_data
-from utils.plotting import plot_cylinder_data
-import utils.result_reader as resread
+import numpy as np
+import utils.readers as resread
 from pod import find_pod_modes, find_time_coeffs
 from projection import find_galerkin_coefficients
-import time
+from snapshots import Snapshots
+from tqdm import tqdm
+from utils.plotting import plot_cylinder_data, plot_square_data
+
+BAR_FMT_STR = '{desc:<20.20s}: {percentage:3.0f}% |{bar}| {n_fmt:>5.5s}/{total_fmt:<5.5s} [{elapsed}]'
 
 plotting = True
 dimension = 2
 num_pod_modes = 4
 
-results = resread.load_meshes('./results/sqr_re100_ts_025', 14)  # read results
-snapshots = Snapshots(results)  # create snapshots from results
-mesh = results[0]
+mesh, snapshots = resread.load_results('./results/test', 5)
 inner_weights = np.ones(mesh.number_nodes * dimension) * mesh.volume_weights
 
 
@@ -26,7 +25,7 @@ def scalar_product(var1, var2, weights=inner_weights):
 # calculating mean flow field and fluctuating velocity
 def find_avg_fluc(snapshots):
     #snapshot.U = stack of u and v velocity
-    Us = np.array([snap.U for snap in snapshots.time]).reshape((snapshots.num_snaps, -1))
+    Us = np.array([snap.U() for snap in snapshots]).reshape((snapshots.num_snaps, -1))
     # mean flow field
     UAvg = np.mean(Us, 0)
     # centered flow field
@@ -55,7 +54,7 @@ def RK45(f, interval, a0, dt):
     a = np.zeros((a0.shape[0], Nt))
     # initial conditions
     a[:, 0] = a0
-    for i in range(Nt - 1):
+    for i in tqdm(range(Nt - 1), desc='Integration', ncols=72, bar_format=BAR_FMT_STR):
         k1 = dt * f(t, a[:, i])
         k2 = dt * f(t + dt / 2, a[:, i] + k1 / 2)
         k3 = dt * f(t + dt / 2, a[:, i] + k2 / 2)
@@ -72,20 +71,20 @@ time_coeffs = find_time_coeffs(UFluc, PODModes, scalar_product)
 b1, b2, L1, L2, Q = find_galerkin_coefficients(mesh, UAvg, PODModes, scalar_product)
 
 a0 = time_coeffs[:num_pod_modes, 0]
-time_interval = (0, 49.75)
+time_interval = (0, (200 - 1) * 0.25)
 dt = 0.25
 time_coeffs_projection = RK45(galerkin_system, time_interval, a0, dt)
 
 if plotting:
     # Plotting POD Modes
-    xcoord = snapshots.time[0].xs
-    ycoord = snapshots.time[0].ys
+    xcoord, ycoord = mesh.node_coords()
 
     for i in range(num_pod_modes):
         # POD modes for velocity u
         # fig, ax = plt.subplots(1, 1, figsize=(4, 4))
         plot_square_data(xcoord, ycoord, PODModes[:mesh.number_nodes, i], resolution=1000)
-        plt.show()
+        plt.savefig(f'pngs/pod_mode_{i}.png', dpi=300)
+        # plt.show()
 
     # Plotting reference time coefficients vs galerkin time coefficients
     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
@@ -104,7 +103,8 @@ if plotting:
     ax.legend(title="Projection", loc=1)
     ax.set_xlabel("t", fontsize=16)
     ax.set_ylabel("a", fontsize=16, labelpad=-2)
-    plt.show()
+    plt.savefig(f'pngs/time_coeffs.png', dpi=300)
+    # plt.show()
 
     # reconstruction plotting
     rec = np.zeros_like(UFluc)
@@ -116,4 +116,5 @@ if plotting:
         if i % 5 == 0:
             # fig, ax = plt.subplots(1, 1, figsize=(4, 4))
             plot_square_data(xcoord, ycoord, rec[:mesh.number_nodes, i], resolution=200, ax=ax, cbar=False)
-            plt.show()
+            plt.savefig(f'pngs/reconstruction_{i}.png', dpi=300)
+            # plt.show()
