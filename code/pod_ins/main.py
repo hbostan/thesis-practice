@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from snapshots import Snapshots
-import utils.cylinder_plot as cp
+from utils.plotting import plot_square_data
+from utils.plotting import plot_cylinder_data
 import utils.result_reader as resread
 from pod import find_pod_modes, find_time_coeffs
 from projection import find_galerkin_coefficients
@@ -11,7 +12,7 @@ plotting = True
 dimension = 2
 num_pod_modes = 4
 
-results = resread.load_meshes('./results/re200_t025', 14)  # read results
+results = resread.load_meshes('./results/sqr_re100_ts_025', 14)  # read results
 snapshots = Snapshots(results)  # create snapshots from results
 mesh = results[0]
 inner_weights = np.ones(mesh.number_nodes * dimension) * mesh.volume_weights
@@ -34,7 +35,7 @@ def find_avg_fluc(snapshots):
     return UAvg, UFluc
 
 
-def galerkin_system(t, a, nu=0.005):
+def galerkin_system(t, a, nu=0.01):
     global b1, b2, L1, L2, Q
     a_dot = np.empty_like(a, dtype=np.float128)
     for k in range(a_dot.shape[0]):
@@ -71,7 +72,7 @@ time_coeffs = find_time_coeffs(UFluc, PODModes, scalar_product)
 b1, b2, L1, L2, Q = find_galerkin_coefficients(mesh, UAvg, PODModes, scalar_product)
 
 a0 = time_coeffs[:num_pod_modes, 0]
-time_interval = (0, 25)
+time_interval = (0, 49.75)
 dt = 0.25
 time_coeffs_projection = RK45(galerkin_system, time_interval, a0, dt)
 
@@ -82,8 +83,8 @@ if plotting:
 
     for i in range(num_pod_modes):
         # POD modes for velocity u
-        fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-        cp.plot_cylinder_data(xcoord, ycoord, PODModes[:mesh.number_nodes, i], resolution=200, ax=ax, cbar=False)
+        # fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+        plot_square_data(xcoord, ycoord, PODModes[:mesh.number_nodes, i], resolution=1000)
         plt.show()
 
     # Plotting reference time coefficients vs galerkin time coefficients
@@ -113,6 +114,6 @@ if plotting:
 
     for i in range(snapshots.num_snaps):
         if i % 5 == 0:
-            fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-            cp.plot_cylinder_data(xcoord, ycoord, rec[:mesh.number_nodes, i], resolution=200, ax=ax, cbar=False)
+            # fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+            plot_square_data(xcoord, ycoord, rec[:mesh.number_nodes, i], resolution=200, ax=ax, cbar=False)
             plt.show()

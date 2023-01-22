@@ -6,7 +6,8 @@ import meshio
 from tqdm import tqdm
 if __name__ == '__main__':
     sys.path.append(os.path.dirname(sys.path[0]))
-from geometry.mesh import RotationalStructuredMesh
+from geometry.mesh.rotational_mesh import RotationalStructuredMesh
+from geometry.mesh.cartesian_mesh import CartesianStructuredMesh
 
 
 def load_file(file_path, idx):
@@ -41,7 +42,7 @@ def read_from_dir(directory):
 
 def create_mesh_from_file(file_path):
     meshio_mesh = meshio.read(file_path)
-    mesh = RotationalStructuredMesh(meshio_mesh)
+    mesh = CartesianStructuredMesh(meshio_mesh)
     return mesh
 
 

@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib import patches
 import numpy as np
 from scipy.interpolate import griddata
 
@@ -7,8 +8,8 @@ def distance(point1, point2):
     return np.sqrt((point2[0] - point1[0])**2 + (point2[1] - point1[1])**2)
 
 
-def plot_data(x, y, data, resolution=1000, radius=0.5, **kwargs):
-    _, ax = plt.subplots(figsize=kwargs.get('figsize', (4, 4)))
+def plot_square_data(x, y, data, resolution=1000, cylinder=(-0.5, 0.5, 1, 1), **kwargs):
+    fig, ax = plt.subplots(figsize=kwargs.get('figsize', (4, 4)))
     xmin = np.round(np.min(x), 1)
     xmax = np.round(np.max(x), 1)
     ymin = np.round(np.min(y), 1)
@@ -25,24 +26,11 @@ def plot_data(x, y, data, resolution=1000, radius=0.5, **kwargs):
     gridx, gridy = np.meshgrid(gridx, gridy)
     # interpolate data
     grid = griddata(np.column_stack((x, y)), data, (gridx, gridy))
-    xmid = resolution // 2
-    ymid = resolution // 2
-
-    for i in range(ymid - (radius // dy), ymid + (radius // dy), 1):
-        for j in range(xmid - (radius // dx), xmid + (radius // dx), 1):
-            if distance((xmid, ymid), (i, j)) < (radius / dx):
-                grid[i, j] = 0
-
-    for i in range(resolution):
-        for j in range(resolution):
-            if distance((xmid, ymid), (i, j)) > (far / dx):
-                grid[i, j] = 0
-
-    cntr = ax.contourf(gridx, gridy, grid)
-    cylinder = plt.Circle((0, 0), radius=radius, color="white")
-    farfield = plt.Circle((0, 0), radius=far, color="black", fill=False)
-    ax.add_patch(cylinder)
-    ax.add_patch(farfield)
+    cntr = ax.contourf(gridx, gridy, grid, levels=100, cmap='jet')
+    sqr_cylinder = patches.Rectangle((-0.5, -0.5), cylinder[2], cylinder[3], color='white')
+    ax.set_aspect(1.0)
+    ax.add_patch(sqr_cylinder)
+    return gridx, gridy, grid
 
 
 # plotting cylinder data

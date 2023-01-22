@@ -50,7 +50,7 @@ class CartesianStructuredMesh:
         for i, n in enumerate(self.nodes):
             n.u_value, n.v_value = self.mesh.point_data['Velocity'][i]
 
-        ### computing cell and node based attributes
+        # computing cell and node based attributes
         self.compute_cell_volumes()
         self.compute_cell_centers()
 
@@ -66,7 +66,7 @@ class CartesianStructuredMesh:
         self.status("Mesh Initialization Successful!")
 
     def status(self, print_string):
-        print(print_string)
+        # print(print_string)
         return
 
     def compute_cell_volumes(self):
@@ -151,14 +151,14 @@ class CartesianStructuredMesh:
         self.wall_node_indices = set(self.wall_node_indices)
         self.boundary_node_indices = set(self.boundary_node_indices)
 
-    def finite_differences(self, data, fd=False, compute_laplacian=False):
+    def finite_differences(self, data, compute_laplacian=False):
         # initialize data vectors
-        dxres = np.zeros(self.number_nodes)
-        dyres = np.zeros(self.number_nodes)
+        resdx = np.zeros(self.number_nodes)
+        resdy = np.zeros(self.number_nodes)
         if compute_laplacian:
-            laplacianres = np.zeros(self.number_nodes)
+            reslaplacian = np.zeros(self.number_nodes)
 
-        # iterate nodes
+        # Compute derivatives using central differencing
         for nod in self.nodes:
             # 5 point stencil indizes
             i = nod.i
@@ -172,6 +172,7 @@ class CartesianStructuredMesh:
                 dy = 0
                 dx = (data[i] - data[r]) / (nod.x - self.nodes[r].x)
             elif nod.i in self.outflow_node_indices:
+                # Outflow nodes don't have right neighbor
                 dx = 0
                 if not u:
                     dy = (data[i] - data[b]) / (nod.y - self.nodes[b].y)
@@ -204,8 +205,8 @@ class CartesianStructuredMesh:
                 dx = (data[l] - data[r]) / (self.nodes[l].x - self.nodes[r].x)
                 dy = (data[u] - data[b]) / (self.nodes[u].y - self.nodes[b].y)
 
-            dxres[i] = dx
-            dyres[i] = dy
+            resdx[i] = dx
+            resdy[i] = dy
             #####
             if compute_laplacian:
 
@@ -215,14 +216,26 @@ class CartesianStructuredMesh:
                     ddx = (data[i] - 2 * data[r] + data[two_over_neighbor]) / (
                         (nod.x - self.nodes[r].x) * (self.nodes[r].x - self.nodes[two_over_neighbor].x))
                     ddy = 0
+                elif nod.i in self.outflow_node_indices:
+                    # Outflow nodes don't have right neighbor
+                    ddx = 0
+                    if not u:
+                        # Upper right corner
+                        two_over_neighbor = self.nodes[b].b
+                        ddy = (data[i] - 2 * data[b] + data[two_over_neighbor]) / (
+                            (nod.y - self.nodes[b].y) * (self.nodes[b].y - self.nodes[two_over_neighbor].y))
+                    elif not b:
+                        # Lower right corner
+                        two_over_neighbor = self.nodes[u].u
+                        ddy = (data[two_over_neighbor] - 2 * data[u] + data[i]) / (
+                            (self.nodes[two_over_neighbor].y - self.nodes[u].y) * (self.nodes[u].y - nod.y))
+                    else:
+                        ddy = (data[u] - 2 * data[i] + data[b]) / ((self.nodes[u].y - nod.y) *
+                                                                   (nod.y - self.nodes[b].y))
                 elif nod.i in self.boundary_node_indices:
                     # Boundary nodes does not have upper or lower nodes
                     ddx = (data[l] - 2 * data[i] + data[r]) / ((self.nodes[l].x - nod.x) * (nod.x - self.nodes[r].x))
                     ddy = 0
-                elif nod.i in self.outflow_node_indices:
-                    ddx = 0
-                    ddy = (data[u] - 2 * data[i] + data[b]) / ((self.nodes[u].y - nod.y) * (nod.y - self.nodes[b].y))
-
                 elif nod.i in self.wall_node_indices:
                     # 1. Bottom wall
                     if not (u):
@@ -231,19 +244,19 @@ class CartesianStructuredMesh:
                         ddy = (data[i] - 2 * data[b] + data[two_over_neighbor]) / (
                             (nod.y - self.nodes[b].y) * (self.nodes[b].y - self.nodes[two_over_neighbor].y))
                     # 2. Upper wall
-                    if not (b):
+                    elif not (b):
                         two_over_neighbor = self.nodes[u].u
                         ddx = 0
                         ddy = (data[two_over_neighbor] - 2 * data[u] + data[i]) / (
                             (self.nodes[two_over_neighbor].y - self.nodes[u].y) * (self.nodes[u].y - nod.y))
                     # 3. Right wall
-                    if not (l):
+                    elif not (l):
                         two_over_neighbor = self.nodes[r].r
                         ddx = (data[i] - 2 * data[r] + data[two_over_neighbor]) / (
                             (nod.x - self.nodes[r].x) * (self.nodes[r].x - self.nodes[two_over_neighbor].x))
                         ddy = 0
                     # 4. Left wall
-                    if not (r):
+                    elif not (r):
                         two_over_neighbor = self.nodes[l].l
                         ddx = (data[two_over_neighbor] - 2 * data[l] + data[i]) / (
                             (self.nodes[two_over_neighbor].x - self.nodes[l].x) * (self.nodes[l].x - nod.x))
@@ -253,10 +266,10 @@ class CartesianStructuredMesh:
                     ddy = (data[u] - 2 * data[i] + data[b]) / ((self.nodes[u].y - nod.y) * (nod.y - self.nodes[b].y))
 
                 laplacian = ddx + ddy
-                laplacianres[i] = laplacian
+                reslaplacian[i] = laplacian
 
         # structured return
         if compute_laplacian:
-            return [dxres, dyres, laplacianres]
+            return [resdx, resdy, reslaplacian]
         else:
-            return [dxres, dyres]
+            return [resdx, resdy]

@@ -25,7 +25,7 @@ def diffusion(mesh, var):
     u = var[:n]
     v = var[n:2 * n]
     # derivatives
-    [_, _, ulap] = mesh.finite_differences(u, computeLaplacian=True)
-    [_, _, vlap] = mesh.finite_differences(v, computeLaplacian=True)
+    [_, _, ulap] = mesh.finite_differences(u, compute_laplacian=True)
+    [_, _, vlap] = mesh.finite_differences(v, compute_laplacian=True)
     # state based diffusion
     return np.concatenate((ulap, vlap))
